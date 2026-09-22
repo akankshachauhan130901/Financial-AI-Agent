@@ -5,3 +5,9 @@ __pycache__/
 .cache/
 *.egg-info/
 API key.txt
+
+users.db
+USER ID AND PASSWORD.xlsx
+fix_app.py
+test_keys.py
+setup.py
