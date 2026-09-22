@@ -5,6 +5,48 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def fix_indian_ticker(ticker: str):
+    """
+    Automatically handles Indian stock tickers.
+    If ticker doesn't work as-is, tries adding .NS or .BO suffix.
+    Works for ALL Indian stocks automatically.
+    """
+    ticker = ticker.upper()
+
+    # Already has exchange suffix
+    if ".NS" in ticker or ".BO" in ticker:
+        return ticker
+
+    # Common US stocks — don't add suffix
+    us_stocks = [
+        "AAPL", "TSLA", "MSFT", "GOOGL", "AMZN", "META",
+        "NVDA", "NFLX", "AMD", "INTC", "UBER", "PYPL"
+    ]
+    if ticker in us_stocks:
+        return ticker
+
+    # Try NSE first for everything else
+    try:
+        test = yf.Ticker(ticker + ".NS")
+        info = test.info
+        if info.get("regularMarketPrice") or info.get("currentPrice"):
+            return ticker + ".NS"
+    except:
+        pass
+
+    # Try BSE next
+    try:
+        test = yf.Ticker(ticker + ".BO")
+        info = test.info
+        if info.get("regularMarketPrice") or info.get("currentPrice"):
+            return ticker + ".BO"
+    except:
+        pass
+
+    # Return original if nothing works
+    return ticker
+
+
 def get_stock_price(ticker: str):
     """
     Fetches current stock price and basic info.
@@ -16,6 +58,7 @@ def get_stock_price(ticker: str):
         Dictionary with current price and stock info
     """
     try:
+        ticker = fix_indian_ticker(ticker)
         stock = yf.Ticker(ticker)
         info = stock.info
 
@@ -48,6 +91,7 @@ def get_price_history(ticker: str, days: int = 7):
         List of daily price records
     """
     try:
+        ticker = fix_indian_ticker(ticker)
         stock = yf.Ticker(ticker)
         end_date = datetime.today()
         start_date = end_date - timedelta(days=days)
@@ -82,6 +126,7 @@ def get_price_change(ticker: str):
         Dictionary with price change info
     """
     try:
+        ticker = fix_indian_ticker(ticker)
         stock_info = get_stock_price(ticker)
 
         current = stock_info.get("current_price")
@@ -108,31 +153,28 @@ def get_price_change(ticker: str):
 
 
 if __name__ == "__main__":
-    ticker = "TSLA"
+    # Test with Indian stock
+    for ticker in ["VEDL", "RELIANCE", "TSLA"]:
+        print(f"\n{'='*60}")
+        print(f"  Stock Analysis: {ticker}")
+        print(f"{'='*60}")
 
-    print(f"\n{'='*60}")
-    print(f"  Stock Analysis: {ticker}")
-    print(f"{'='*60}")
+        print("\n📊 Current Stock Info:")
+        print("-" * 40)
+        info = get_stock_price(ticker)
+        for key, value in info.items():
+            print(f"  {key:<20}: {value}")
 
-    # Current price info
-    print("\n📊 Current Stock Info:")
-    print("-" * 40)
-    info = get_stock_price(ticker)
-    for key, value in info.items():
-        print(f"  {key:<20}: {value}")
+        print("\n📈 Price Change:")
+        print("-" * 40)
+        change = get_price_change(ticker)
+        for key, value in change.items():
+            print(f"  {key:<20}: {value}")
 
-    # Price change
-    print("\n📈 Price Change:")
-    print("-" * 40)
-    change = get_price_change(ticker)
-    for key, value in change.items():
-        print(f"  {key:<20}: {value}")
-
-    # Price history
-    print("\n📅 Last 7 Days History:")
-    print("-" * 40)
-    history = get_price_history(ticker, days=7)
-    for record in history:
-        print(f"  {record['date']} | Open: {record['open']} | "
-              f"Close: {record['close']} | High: {record['high']} | "
-              f"Low: {record['low']}")
+        print("\n📅 Last 7 Days History:")
+        print("-" * 40)
+        history = get_price_history(ticker, days=7)
+        for record in history:
+            print(f"  {record['date']} | Open: {record['open']} | "
+                  f"Close: {record['close']} | High: {record['high']} | "
+                  f"Low: {record['low']}")

@@ -206,7 +206,7 @@ def execute_tool(tool_name: str, tool_args: dict):
 
 
 # ── Agent Loop ────────────────────────────────────────────────
-def run_agent(user_query: str):
+def run_agent(user_query: str, chat_history: list = []):
     """
     Main agent loop — takes user query, decides tools,
     executes them and returns final answer.
@@ -217,11 +217,12 @@ def run_agent(user_query: str):
     print(f"  📝 Query: {user_query}")
     print(f"{'='*60}")
 
+    # Build messages with history
     messages = [
         {
             "role": "system",
             "content": """You are a Financial AI Agent specialized in market insights.
-You have access to tools for fetching news, stock prices, sentiment analysis, 
+You have access to tools for fetching news, stock prices, sentiment analysis,
 summarization and named entity recognition.
 
 When a user asks about a company or stock:
@@ -230,15 +231,22 @@ When a user asks about a company or stock:
 3. Provide a comprehensive, structured market insight
 
 Always be specific with numbers, percentages and dates.
-Format your final response clearly with sections."""
-        },
-        {
-            "role": "user",
-            "content": user_query
+Format your final response clearly with sections.
+Never ask the user questions — always use your tools to find the answer directly."""
         }
     ]
 
-    # Agentic loop — keep calling tools until agent is done
+    # Add previous chat history for context
+    for msg in chat_history[-6:]:
+        if msg["role"] == "user":
+            messages.append({"role": "user", "content": msg["content"]})
+        elif msg["role"] == "assistant":
+            messages.append({"role": "assistant", "content": msg["content"]})
+
+    # Add current query
+    messages.append({"role": "user", "content": user_query})
+
+    # Agentic loop
     max_iterations = 5
     iteration = 0
 
@@ -246,17 +254,26 @@ Format your final response clearly with sections."""
         iteration += 1
         print(f"\n  🔄 Agent iteration {iteration}...")
 
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=messages,
-            tools=TOOLS,
-            tool_choice="auto",
-            max_tokens=1000
-        )
+        try:
+            response = client.chat.completions.create(
+                model="qwen/qwen3.8-27b",
+                messages=messages,
+                tools=TOOLS,
+                tool_choice="auto",
+                max_tokens=1000
+            )
+        except Exception as e:
+            print(f"\n  ⚠️ Tool call failed, retrying without tools...")
+            response = client.chat.completions.create(
+                model="qwen/qwen3.8-27b",
+                messages=messages,
+                max_tokens=1000
+            )
+            message = response.choices[0].message
+            return message.content
 
         message = response.choices[0].message
 
-        # If no tool calls — agent is done, return final answer
         if not message.tool_calls:
             print(f"\n{'='*60}")
             print("  ✅ Final Answer:")
@@ -264,7 +281,6 @@ Format your final response clearly with sections."""
             print(message.content)
             return message.content
 
-        # Process tool calls
         messages.append({
             "role": "assistant",
             "content": message.content or "",
@@ -281,7 +297,6 @@ Format your final response clearly with sections."""
             ]
         })
 
-        # Execute each tool and add results to messages
         for tool_call in message.tool_calls:
             tool_name = tool_call.function.name
             tool_args = json.loads(tool_call.function.arguments)
@@ -298,7 +313,6 @@ Format your final response clearly with sections."""
 
 # ── Main ──────────────────────────────────────────────────────
 if __name__ == "__main__":
-    # Test queries
     queries = [
         "What is the current stock price and market sentiment for Tesla?",
         "Give me a summary of latest Apple news and how the stock is performing."
